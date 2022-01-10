@@ -75,7 +75,12 @@ impl OptionParser {
         println!("{}", self.opts.usage(&brief));
     }
 
-    pub fn parse(&mut self, args: Option<Vec<String>>) -> HashMap<String, Option<Vec<String>>> {
+    pub fn parse(&mut self) -> HashMap<String, Option<Vec<String>>> {
+        let args = env::args().collect();
+        self.parse_with_args(args)
+    }
+
+    fn parse_with_args(&mut self, args: Vec<String>) -> HashMap<String, Option<Vec<String>>> {
         // Always set help option if it's not specified by user.
         if !self.given_options.iter().any(|x| x.name == "help") {
             self.opts.opt(
@@ -88,16 +93,11 @@ impl OptionParser {
             );
         }
 
-        let user_inputs = if let Some(v) = args {
-            v
-        } else {
-            env::args().collect()
-        };
-        let matches = match self.opts.parse(&user_inputs[1..]) {
+        let matches = match self.opts.parse(&args[1..]) {
             Ok(m) => m,
             Err(f) => {
-                self.show_usage(&user_inputs[0]);
-                if user_inputs[1..].iter().any(|x| x == "--help" || x == "-h") {
+                self.show_usage(&args[0]);
+                if args[1..].iter().any(|x| x == "--help" || x == "-h") {
                     // If -h or --help exists in args,
                     // need to show help message and exit
                     // even though there is any other wrong option.
@@ -113,7 +113,7 @@ impl OptionParser {
         if matches.opt_present("h") {
             // When an user specifies -h or --help,
             // show usage help message and exit.
-            self.show_usage(&user_inputs[0]);
+            self.show_usage(&args[0]);
             process::exit(0);
         }
 
@@ -280,7 +280,7 @@ mod tests {
         parser.add_option("input", "", None, None, None, None, None);
 
         let options = setup_user_input_option(vec!["--input", "INPUT_VALUE"]);
-        let args = parser.parse(Some(options));
+        let args = parser.parse_with_args(options);
 
         assert_eq!(args.len(), 1);
         assert!(args.contains_key("input"));
@@ -295,7 +295,7 @@ mod tests {
         parser.add_option("input", "i", None, None, None, None, None);
 
         let options = setup_user_input_option(vec!["-i", "INPUT_VALUE"]);
-        let args = parser.parse(Some(options));
+        let args = parser.parse_with_args(options);
 
         assert_eq!(args.len(), 1);
         assert!(args.contains_key("input"));
@@ -319,7 +319,7 @@ mod tests {
         );
 
         let options = setup_user_input_option(vec!["--verbose"]);
-        let args = parser.parse(Some(options));
+        let args = parser.parse_with_args(options);
 
         assert_eq!(args.len(), 1);
         assert!(args.contains_key("verbose"));
