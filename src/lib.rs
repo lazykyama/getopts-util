@@ -6,7 +6,7 @@ use std::process;
 
 use getopts::HasArg;
 use getopts::Occur;
-use getopts::Options;
+use getopts::Options as GetOptOptions;
 
 pub enum OptAction {
     StoreTrue,
@@ -38,15 +38,65 @@ impl OptionDef {
     }
 }
 
+pub struct Options {
+    defined_names: Vec<String>,
+    parsed_options: HashMap<String, Vec<String>>,
+}
+
+impl Options {
+    pub fn new() -> Self {
+        Self {
+            defined_names: Vec::new(),
+            parsed_options: HashMap::new(),
+        }
+    }
+
+    pub fn set_defined_names(&mut self, names: Vec<&String>) {
+        for n in &names {
+            self.defined_names.push(n.to_string());
+        }
+    }
+
+    pub fn insert(&mut self, key: String, values: Vec<String>) -> Option<Vec<String>> {
+        self.parsed_options.insert(key, values)
+    }
+
+    pub fn get(&self, key: &String) -> Option<&Vec<String>> {
+        if self.parsed_options.contains_key(key) {
+            self.parsed_options.get(key)
+        } else {
+            None
+        }
+    }
+
+    pub fn contains_key(&self, key: &String) -> bool {
+        if self.parsed_options.contains_key(key) {
+            true
+        } else if self.defined_names.contains(key) {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn defined_len(&self) -> usize {
+        self.defined_names.len()
+    }
+
+    pub fn parsed_len(&self) -> usize {
+        self.parsed_options.len()
+    }
+}
+
 pub struct OptionParser {
-    opts: Options,
+    opts: GetOptOptions,
     given_options: Vec<OptionDef>,
 }
 
 impl OptionParser {
     pub fn new() -> Self {
         Self {
-            opts: Options::new(),
+            opts: GetOptOptions::new(),
             given_options: Vec::new(),
         }
     }
@@ -76,12 +126,12 @@ impl OptionParser {
         println!("{}", self.opts.usage(&brief));
     }
 
-    pub fn parse(&mut self) -> HashMap<String, Option<Vec<String>>> {
+    pub fn parse(&mut self) -> Options {
         let args = env::args().collect();
         self.parse_with_args(args)
     }
 
-    fn parse_with_args(&mut self, args: Vec<String>) -> HashMap<String, Option<Vec<String>>> {
+    fn parse_with_args(&mut self, args: Vec<String>) -> Options {
         // Always set help option if it's not specified by user.
         if !self.given_options.iter().any(|x| x.name == "help") {
             self.opts.opt(
@@ -118,7 +168,8 @@ impl OptionParser {
             process::exit(0);
         }
 
-        let mut options = HashMap::<String, Option<Vec<String>>>::new();
+        let mut options = Options::new();
+        options.set_defined_names(self.given_options.iter().map(|x| &x.name).collect());
         for o in &self.given_options {
             if matches.opt_present(&o.name) {
                 // option is given.
@@ -133,7 +184,7 @@ impl OptionParser {
                     let opt_values = matches.opt_strs(&o.name);
                     if opt_values.len() > 0 {
                         // if any values are found, directly store them.
-                        options.insert(o.name.clone(), Some(opt_values));
+                        options.insert(o.name.clone(), opt_values);
                     } else {
                         // if no value is specified,
                         // check if the option is required or not.
@@ -152,7 +203,7 @@ impl OptionParser {
                     let opt_value = matches.opt_str(&o.name);
                     if let Some(v) = opt_value {
                         // if a value is found, directly store it.
-                        options.insert(o.name.clone(), Some(vec![v]));
+                        options.insert(o.name.clone(), vec![v]);
                     } else {
                         // if no value is specified,
                         // check if it's a flag option or an option with default value.
@@ -160,10 +211,10 @@ impl OptionParser {
                             // flag option.
                             options.insert(
                                 o.name.clone(),
-                                Some(vec![match v {
+                                vec![match v {
                                     OptAction::StoreTrue => "true".to_string(),
                                     OptAction::StoreFalse => "false".to_string(),
-                                }]),
+                                }],
                             );
                         } else {
                             // non flag option.
@@ -180,9 +231,7 @@ impl OptionParser {
                 // this option is not specified.
                 // need to set default value.
                 if let Some(v) = o.default.clone() {
-                    options.insert(o.name.clone(), Some(vec![v]));
-                } else {
-                    options.insert(o.name.clone(), None);
+                    options.insert(o.name.clone(), vec![v]);
                 }
             }
         }
@@ -206,11 +255,11 @@ impl OptionParser {
         option.short_name = short_name.to_string().clone();
         option.required = if let Some(v) = required { v } else { false };
         option.multiple = if let Some(v) = multiple { v } else { false };
-        option.default = Some(if let Some(v) = default {
-            v.to_string().clone()
+        option.default = if let Some(v) = default {
+            Some(v.to_string().clone())
         } else {
-            "".to_string()
-        });
+            None
+        };
         option.action = action;
         option.help = if let Some(v) = help {
             v.to_string().clone()
@@ -278,52 +327,61 @@ mod tests {
     #[test]
     fn test_single_option() {
         let mut parser = OptionParser::new();
-        parser.add_option("input", "", None, None, None, None, None);
+        let key = "input".to_string();
+        parser.add_option(&key, "", None, None, None, None, None);
 
         let options = setup_user_input_option(vec!["--input", "INPUT_VALUE"]);
         let args = parser.parse_with_args(options);
 
-        assert_eq!(args.len(), 1);
-        assert!(args.contains_key("input"));
-        assert_eq!(
-            args.get("input"),
-            Some(&Some(vec!["INPUT_VALUE".to_string()]))
-        );
+        assert_eq!(args.defined_len(), 1);
+        assert_eq!(args.parsed_len(), 1);
+        assert!(args.contains_key(&key));
+        let expected_value = vec!["INPUT_VALUE".to_string()];
+        assert_eq!(args.get(&key), Some(&expected_value));
     }
     #[test]
     fn test_single_short_option() {
         let mut parser = OptionParser::new();
-        parser.add_option("input", "i", None, None, None, None, None);
+        let key = "input".to_string();
+        let short_key = "i".to_string();
+        parser.add_option(&key, &short_key, None, None, None, None, None);
 
         let options = setup_user_input_option(vec!["-i", "INPUT_VALUE"]);
         let args = parser.parse_with_args(options);
 
-        assert_eq!(args.len(), 1);
-        assert!(args.contains_key("input"));
-        assert_eq!(
-            args.get("input"),
-            Some(&Some(vec!["INPUT_VALUE".to_string()]))
-        );
+        assert_eq!(args.defined_len(), 1);
+        assert_eq!(args.parsed_len(), 1);
+        assert!(args.contains_key(&key));
+        let expected_value = vec!["INPUT_VALUE".to_string()];
+        assert_eq!(args.get(&key), Some(&expected_value));
     }
 
     #[test]
     fn test_single_flag_option() {
         let mut parser = OptionParser::new();
-        parser.add_option(
-            "verbose",
-            "",
-            None,
-            None,
-            None,
-            Some(OptAction::StoreTrue),
-            None,
-        );
+        let key = "verbose".to_string();
+        parser.add_option(&key, "", None, None, None, Some(OptAction::StoreTrue), None);
 
         let options = setup_user_input_option(vec!["--verbose"]);
         let args = parser.parse_with_args(options);
 
-        assert_eq!(args.len(), 1);
-        assert!(args.contains_key("verbose"));
-        assert_eq!(args.get("verbose"), Some(&Some(vec!["true".to_string()])));
+        assert_eq!(args.defined_len(), 1);
+        assert_eq!(args.parsed_len(), 1);
+        assert!(args.contains_key(&key));
+        let expected_value = vec!["true".to_string()];
+        assert_eq!(args.get(&key), Some(&expected_value));
+    }
+
+    #[test]
+    fn test_single_option_without_user_given_values() {
+        let mut parser = OptionParser::new();
+        let key = "input".to_string();
+        parser.add_option(&key, "", None, None, None, None, None);
+        let args = parser.parse();
+
+        assert_eq!(args.defined_len(), 1);
+        assert_eq!(args.parsed_len(), 0);
+        assert!(args.contains_key(&key));
+        assert_eq!(args.get(&key), None);
     }
 }
