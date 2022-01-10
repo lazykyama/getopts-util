@@ -69,9 +69,10 @@ impl OptionParser {
             if !o.required {
                 single_opt = format!("[{}]", single_opt);
             }
+            single_opt = format!(" {}", single_opt);
             options_for_brief.push_str(&single_opt);
         }
-        let brief = format!("Usage: {} {}", program_name, options_for_brief);
+        let brief = format!("Usage: {}{}", program_name, options_for_brief);
         println!("{}", self.opts.usage(&brief));
     }
 
