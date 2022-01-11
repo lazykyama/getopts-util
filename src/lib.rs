@@ -2,6 +2,7 @@ extern crate getopts;
 
 use std::collections::HashMap;
 use std::env;
+use std::fmt;
 use std::process;
 
 use getopts::HasArg;
@@ -85,6 +86,15 @@ impl Options {
 
     pub fn parsed_len(&self) -> usize {
         self.parsed_options.len()
+    }
+}
+
+impl fmt::Debug for Options {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Options")
+            .field("defined_names", &self.defined_names)
+            .field("parsed_options", &self.parsed_options)
+            .finish()
     }
 }
 
@@ -338,7 +348,12 @@ mod tests {
         assert!(args.contains_key(&key));
         let expected_value = vec!["INPUT_VALUE".to_string()];
         assert_eq!(args.get(&key), Some(&expected_value));
+        assert_eq!(
+            format!("{:?}", args),
+            "Options { defined_names: [\"input\"], parsed_options: {\"input\": [\"INPUT_VALUE\"]} }",
+        );
     }
+
     #[test]
     fn test_single_short_option() {
         let mut parser = OptionParser::new();
@@ -354,6 +369,10 @@ mod tests {
         assert!(args.contains_key(&key));
         let expected_value = vec!["INPUT_VALUE".to_string()];
         assert_eq!(args.get(&key), Some(&expected_value));
+        assert_eq!(
+            format!("{:?}", args),
+            "Options { defined_names: [\"input\"], parsed_options: {\"input\": [\"INPUT_VALUE\"]} }",
+        );
     }
 
     #[test]
@@ -370,6 +389,10 @@ mod tests {
         assert!(args.contains_key(&key));
         let expected_value = vec!["true".to_string()];
         assert_eq!(args.get(&key), Some(&expected_value));
+        assert_eq!(
+            format!("{:?}", args),
+            "Options { defined_names: [\"verbose\"], parsed_options: {\"verbose\": [\"true\"]} }",
+        );
     }
 
     #[test]
@@ -383,5 +406,9 @@ mod tests {
         assert_eq!(args.parsed_len(), 0);
         assert!(args.contains_key(&key));
         assert_eq!(args.get(&key), None);
+        assert_eq!(
+            format!("{:?}", args),
+            "Options { defined_names: [\"input\"], parsed_options: {} }",
+        );
     }
 }
