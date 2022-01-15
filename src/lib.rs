@@ -101,6 +101,7 @@ impl fmt::Debug for Options {
 pub struct OptionParser {
     opts: GetOptOptions,
     given_options: Vec<OptionDef>,
+    description: String,
 }
 
 impl OptionParser {
@@ -108,7 +109,14 @@ impl OptionParser {
         Self {
             opts: GetOptOptions::new(),
             given_options: Vec::new(),
+            description: String::from(""),
         }
+    }
+
+    pub fn new_with_description(description: &String) -> Self {
+        let mut obj = OptionParser::new();
+        obj.description = description.clone();
+        obj
     }
 
     fn show_usage(&self, program_name: &String) {
@@ -132,7 +140,15 @@ impl OptionParser {
             single_opt = format!(" {}", single_opt);
             options_for_brief.push_str(&single_opt);
         }
-        let brief = format!("Usage: {}{}", program_name, options_for_brief);
+        let brief = format!(
+            "Usage: {}{}{}",
+            if self.description.len() == 0 {
+                "".to_string()
+            } else {
+                format!("{} ", self.description)
+            },
+            program_name,
+            options_for_brief);
         println!("{}", self.opts.usage(&brief));
     }
 
@@ -337,6 +353,27 @@ mod tests {
     #[test]
     fn test_single_option() {
         let mut parser = OptionParser::new();
+        let key = "input".to_string();
+        parser.add_option(&key, "", None, None, None, None, None);
+
+        let options = setup_user_input_option(vec!["--input", "INPUT_VALUE"]);
+        let args = parser.parse_with_args(options);
+
+        assert_eq!(args.defined_len(), 1);
+        assert_eq!(args.parsed_len(), 1);
+        assert!(args.contains_key(&key));
+        let expected_value = vec!["INPUT_VALUE".to_string()];
+        assert_eq!(args.get(&key), Some(&expected_value));
+        assert_eq!(
+            format!("{:?}", args),
+            "Options { defined_names: [\"input\"], parsed_options: {\"input\": [\"INPUT_VALUE\"]} }",
+        );
+    }
+
+    #[test]
+    fn test_single_option_with_desc() {
+        let mut parser = OptionParser::new_with_description(
+            &"Option parser test".to_string());
         let key = "input".to_string();
         parser.add_option(&key, "", None, None, None, None, None);
 
